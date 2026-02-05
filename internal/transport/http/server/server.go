@@ -1,19 +1,27 @@
 package server
 
 import (
-	"fmt"
+	"context"
 	"net/http"
-	"time"
 )
 
-func Run() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/time", timeHandler)
-
-	return http.ListenAndServe(":8081", mux)
+type Server struct {
+	httpServer *http.Server
 }
 
-func timeHandler(w http.ResponseWriter, r *http.Request) {
-	now := time.Now().Format(time.RFC3339)
-	fmt.Fprint(w, now)
+func NewServer(address string, handler http.Handler) *Server {
+	return &Server{
+		httpServer: &http.Server{
+			Addr:    address,
+			Handler: handler,
+		},
+	}
+}
+
+func (s *Server) Run() error {
+	return s.httpServer.ListenAndServe()
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
 }
