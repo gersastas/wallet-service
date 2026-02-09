@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	server := httpserver.New(":8081")
+	server := httpserver.New(":8080")
 	if err := server.Run(); err != nil {
 		log.Panic(err)
 	}
