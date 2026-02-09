@@ -45,10 +45,9 @@ func (s *Server) Run() error {
 
 func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Format(time.RFC3339)
-
 	ip := getIP(r)
-
 	s.stats[ip]++
+	
 	if _, err := w.Write([]byte(now)); err != nil {
 		s.logger.Warn(
 			"failed to write response",
@@ -62,8 +61,7 @@ func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 	for ip, count := range s.stats {
 		if _, err := w.Write([]byte(ip + "\t" + strconv.Itoa(count) + "\n")); err != nil {
-			s.logger.Warn(
-				"failed to write response", zap.Error(err))
+			s.logger.Warn("failed to write response", zap.Error(err))
 		}
 	}
 }
