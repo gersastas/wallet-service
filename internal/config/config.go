@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"go.uber.org/zap"
+	"github.com/sirupsen/logrus"
 )
 
 const envFileName = ".env"
@@ -32,21 +32,22 @@ func (e *EnvSetting) GetHelpString() (string, error) {
 	return helpString, nil
 }
 
-func New(logger *zap.Logger) *Config {
+func New() *Config {
 	envSetting := &EnvSetting{}
 
 	helpString, err := envSetting.GetHelpString()
 	if err != nil {
-		logger.Fatal("failed to get help string", zap.Error(err))
+		logrus.Panicf("failed to get help string: %v", err)
 	}
-	logger.Info(helpString)
+
+	logrus.Info(helpString)
 
 	if findConfigFile() {
 		if err := cleanenv.ReadConfig(envFileName, envSetting); err != nil {
-			logger.Fatal("failed to read env config", zap.Error(err))
+			logrus.Panicf("failed to read env config: %v", err)
 		}
 	} else if err := cleanenv.ReadEnv(envSetting); err != nil {
-		logger.Fatal("failed to read env config", zap.Error(err))
+		logrus.Panicf("failed to read env config: %v", err)
 	}
 
 	return &Config{env: envSetting}
