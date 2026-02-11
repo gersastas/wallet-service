@@ -1,14 +1,16 @@
 package main
 
 import (
-	"log"
-
+	"github.com/gersastas/wallet-service/internal/config"
 	httpserver "github.com/gersastas/wallet-service/internal/transport/http/server"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	server := httpserver.New(":8083")
+	cfg := config.New()
+	server := httpserver.New(cfg.GetHTTPBindAddr())
+
 	if err := server.Run(); err != nil {
-		log.Panic(err)
+		logrus.Panic("HTTP server failed", err)
 	}
 }

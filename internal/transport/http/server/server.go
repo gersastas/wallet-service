@@ -7,12 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/sirupsen/logrus"
 )
 
 type Server struct {
 	httpServer *http.Server
-	logger     *zap.Logger
 	stats      map[string]int
 }
 
@@ -45,25 +44,22 @@ func (s *Server) Run() error {
 
 func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Format(time.RFC3339)
-
 	ip := getIP(r)
-
 	s.stats[ip]++
+
 	if _, err := w.Write([]byte(now)); err != nil {
-		s.logger.Warn(
-			"failed to write response",
-			zap.Error(err),
-			zap.String("remote_addr", r.RemoteAddr),
-			zap.String("path", r.URL.Path),
-		)
+		logrus.WithFields(logrus.Fields{
+			"error":       err,
+			"remote_addr": r.RemoteAddr,
+			"path":        r.URL.Path,
+		}).Warn("failed to write response")
 	}
 }
 
 func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 	for ip, count := range s.stats {
 		if _, err := w.Write([]byte(ip + "\t" + strconv.Itoa(count) + "\n")); err != nil {
-			s.logger.Warn(
-				"failed to write response", zap.Error(err))
+			logrus.Warn("failed to write response", zap.Error(err))
 		}
 	}
 }
