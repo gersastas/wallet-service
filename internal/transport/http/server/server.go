@@ -59,7 +59,7 @@ func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 	for ip, count := range s.stats {
 		if _, err := w.Write([]byte(ip + "\t" + strconv.Itoa(count) + "\n")); err != nil {
-			logrus.Warn("failed to write response", zap.Error(err))
+			logrus.Warn("failed to write response", err)
 		}
 	}
 }
