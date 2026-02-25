@@ -4,35 +4,31 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gersastas/wallet-service/internal/config"
 	httpserver "github.com/gersastas/wallet-service/internal/transport/http/server"
-	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServer_Integration(t *testing.T) {
 	originalAddr := os.Getenv("HTTP_BIND_ADDR")
 	defer func() {
-		if err := os.Setenv("HTTP_BIND_ADDR", originalAddr); err != nil {
-			t.Logf("failed to restore original HTTP_BIND_ADDR: %v", err)
-		}
+		err := os.Setenv("HTTP_BIND_ADDR", originalAddr)
+		require.NoError(t, err)
 	}()
 
 	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("failed to get free port: %v", err)
-	}
+	require.NoError(t, err)
+
 	testAddr := "localhost:" + port
-	if err := os.Setenv("HTTP_BIND_ADDR", testAddr); err != nil {
-		t.Fatalf("failed to set HTTP_BIND_ADDR: %v", err)
-	}
+	err = os.Setenv("HTTP_BIND_ADDR", testAddr)
+	require.NoError(t, err)
 
 	cfg := config.New()
-	if cfg.GetHTTPBindAddr() != testAddr {
-		t.Fatalf("expected bind addr %q, got %q", testAddr, cfg.GetHTTPBindAddr())
-	}
+	require.Equal(t, testAddr, cfg.GetHTTPBindAddr())
 
 	server := httpserver.New(cfg.GetHTTPBindAddr())
 
@@ -40,9 +36,7 @@ func TestServer_Integration(t *testing.T) {
 
 	go func() {
 		close(ready)
-		if err := server.Run(); err != nil {
-			logrus.Errorf("server run failed: %v", err)
-		}
+		_ = server.Run()
 	}()
 
 	select {
@@ -54,25 +48,27 @@ func TestServer_Integration(t *testing.T) {
 	}
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	var resp *http.Response
-	const maxRetries = 5
-	for i := 0; i < maxRetries; i++ {
-		resp, err = client.Get("http://" + testAddr + "/")
-		if err == nil {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatalf("failed to connect to server after %d retries: %v", maxRetries, err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Logf("failed to close response body: %v", err)
-		}
-	}()
 
-	t.Logf("server responded with status %s", resp.Status)
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			resp, err := client.Get("http://" + testAddr + "/time")
+			require.NoError(t, err)
+			defer func() {
+				err := resp.Body.Close()
+				require.NoError(t, err)
+			}()
+
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+		}()
+	}
+
+	wg.Wait()
+
+	t.Log("all 100 requests completed successfully")
 }
 
 func getFreePort() (string, error) {
@@ -81,9 +77,7 @@ func getFreePort() (string, error) {
 		return "", err
 	}
 	defer func() {
-		if err := l.Close(); err != nil {
-			_ = err
-		}
+		_ = l.Close()
 	}()
 	_, port, err := net.SplitHostPort(l.Addr().String())
 	if err != nil {
