@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -13,6 +14,7 @@ import (
 type Server struct {
 	httpServer *http.Server
 	stats      map[string]int
+	mu         sync.Mutex
 }
 
 func New(address string) *Server {
@@ -45,7 +47,10 @@ func (s *Server) Run() error {
 func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Format(time.RFC3339)
 	ip := getIP(r)
+
+	s.mu.Lock()
 	s.stats[ip]++
+	s.mu.Unlock()
 
 	if _, err := w.Write([]byte(now)); err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -57,6 +62,9 @@ func (s *Server) timeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	for ip, count := range s.stats {
 		if _, err := w.Write([]byte(ip + "\t" + strconv.Itoa(count) + "\n")); err != nil {
 			logrus.Warn("failed to write response", err)
