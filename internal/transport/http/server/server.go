@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gersastas/wallet-service/internal/models"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
@@ -20,16 +20,18 @@ type Server struct {
 }
 
 func New(address string) *Server {
+	r := chi.NewRouter()
+
 	s := &Server{
 		wallet: make(map[string]*models.Wallet),
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/wallets/", s.walletHandler)
+	r.Post("/wallets", s.handleCreateWallet)
+	r.Get("/wallets/{id}", s.handleGetWallet)
 
 	s.httpServer = &http.Server{
 		Addr:    address,
-		Handler: mux,
+		Handler: r,
 	}
 
 	return s
@@ -37,27 +39,6 @@ func New(address string) *Server {
 
 func (s *Server) Handler() http.Handler {
 	return s.httpServer.Handler
-}
-
-func (s *Server) walletHandler(w http.ResponseWriter, r *http.Request) {
-	walletID := strings.TrimPrefix(r.URL.Path, "/wallets/")
-
-	switch r.Method {
-	case http.MethodPost:
-		if walletID != "" {
-			s.sendError(w, "invalid path", http.StatusNotFound)
-			return
-		}
-		s.handleCreateWallet(w, r)
-	case http.MethodGet:
-		if walletID == "" {
-			s.sendError(w, "wallet_id is required in path", http.StatusBadRequest)
-			return
-		}
-		s.handleGetWallet(w, r, walletID)
-	default:
-		s.sendError(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
 }
 
 func (s *Server) Run() error {
@@ -142,7 +123,13 @@ func (s *Server) handleCreateWallet(w http.ResponseWriter, r *http.Request) {
 	s.sendJSON(w, resp, http.StatusCreated)
 }
 
-func (s *Server) handleGetWallet(w http.ResponseWriter, r *http.Request, walletID string) {
+func (s *Server) handleGetWallet(w http.ResponseWriter, r *http.Request) {
+	walletID := chi.URLParam(r, "id")
+	if walletID == "" {
+		s.sendError(w, "wallet_id is required", http.StatusBadRequest)
+		return
+	}
+
 	s.walletsMu.Lock()
 	wallet, exists := s.wallet[walletID]
 	s.walletsMu.Unlock()
