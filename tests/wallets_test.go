@@ -66,7 +66,7 @@ func TestCreateWallet_Success(t *testing.T) {
 		Currency: "RUB",
 	}
 
-	resp := makeRequest(t, ts, http.MethodPost, "/wallets/", reqBody)
+	resp := makeRequest(t, ts, http.MethodPost, "/wallets", reqBody) // ← убрал слэш
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -97,11 +97,21 @@ func TestCreateWallet_ValidationError(t *testing.T) {
 			body:    server.WalletRequest{UserID: "550e8400-e29b-41d4-a716-446655440000", Currency: "RUB"},
 			wantErr: "name is required",
 		},
+		{
+			name:    "empty currency",
+			body:    server.WalletRequest{UserID: "550e8400-e29b-41d4-a716-446655440000", Name: "Test"},
+			wantErr: "currency is required",
+		},
+		{
+			name:    "invalid user_id format",
+			body:    server.WalletRequest{UserID: "invalid-uuid", Name: "Test", Currency: "RUB"},
+			wantErr: "user_id is invalid",
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := makeRequest(t, ts, http.MethodPost, "/wallets/", tc.body)
+			resp := makeRequest(t, ts, http.MethodPost, "/wallets", tc.body) // ← убрал слэш
 
 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -120,7 +130,7 @@ func TestGetWallet_Success(t *testing.T) {
 		Name:     "My Wallet",
 		Currency: "USD",
 	}
-	createResp := makeRequest(t, ts, http.MethodPost, "/wallets/", createReq)
+	createResp := makeRequest(t, ts, http.MethodPost, "/wallets", createReq) // ← убрал слэш
 
 	var createdWallet server.WalletResponse
 	decodeResponse(t, createResp, &createdWallet)
@@ -134,7 +144,10 @@ func TestGetWallet_Success(t *testing.T) {
 	decodeResponse(t, getResp, &result)
 
 	assert.Equal(t, createdWallet.ID, result.ID)
+	assert.Equal(t, createdWallet.UserID, result.UserID)
+	assert.Equal(t, createdWallet.Name, result.Name)
 	assert.Equal(t, createdWallet.Balance, result.Balance)
+	assert.Equal(t, createdWallet.Currency, result.Currency)
 }
 
 func TestGetWallet_NotFound(t *testing.T) {
