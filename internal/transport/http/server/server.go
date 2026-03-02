@@ -19,7 +19,9 @@ type Server struct {
 }
 
 func New(address string) *Server {
-	s := &Server{}
+	s := &Server{
+		wallet: make(map[string]*models.Wallet),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wallets/create", s.createWallet)
@@ -125,5 +127,55 @@ func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getWallet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
+	walletID := r.URL.Query().Get("id")
+	if walletID == "" {
+		s.sendError(w, "wallet_id is required", http.StatusBadRequest)
+		return
+	}
+
+	s.walletsMu.Lock()
+	wallet, exists := s.wallet[walletID]
+	s.walletsMu.Unlock()
+
+	if !exists {
+		s.sendError(w, "wallet not found", http.StatusNotFound)
+		return
+	}
+
+	if wallet.DeletedAt != nil {
+		s.sendError(w, "wallet not found", http.StatusNotFound)
+		return
+	}
+
+	resp := WalletResponse{
+		ID:        wallet.ID.String(),
+		UserID:    wallet.UserID.String(),
+		Name:      wallet.Name,
+		Balance:   wallet.Balance,
+		Currency:  wallet.Currency,
+		CreatedAt: wallet.CreatedAt,
+	}
+
+	s.sendJSON(w, resp, http.StatusOK)
+}
+
+func (s *Server) sendJSON(w http.ResponseWriter, data interface{}, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		logrus.WithError(err).Error("failed to encode response")
+	}
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+func (s *Server) sendError(w http.ResponseWriter, message string, status int) {
+	s.sendJSON(w, ErrorResponse{Error: message}, status)
 }
