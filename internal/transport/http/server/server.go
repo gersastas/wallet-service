@@ -35,6 +35,10 @@ func New(address string) *Server {
 	return s
 }
 
+func (s *Server) Handler() http.Handler {
+	return s.httpServer.Handler
+}
+
 func (s *Server) walletHandler(w http.ResponseWriter, r *http.Request) {
 	walletID := strings.TrimPrefix(r.URL.Path, "/wallets/")
 

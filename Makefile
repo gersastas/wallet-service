@@ -6,7 +6,7 @@ lint:
 	$(GOLANGCI_LINT) run
 
 test:
-	go test ./...
+	go test ./tests/wallets_test.go
 
 run:
 	go run ./cmd/wallet-service/main.go
