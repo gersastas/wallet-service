@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,8 +25,7 @@ func New(address string) *Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/wallets/create", s.createWallet)
-	mux.HandleFunc("/wallets/get", s.getWallet)
+	mux.HandleFunc("/wallets/", s.walletHandler)
 
 	s.httpServer = &http.Server{
 		Addr:    address,
@@ -35,13 +35,32 @@ func New(address string) *Server {
 	return s
 }
 
+func (s *Server) walletHandler(w http.ResponseWriter, r *http.Request) {
+	walletID := strings.TrimPrefix(r.URL.Path, "/wallets/")
+
+	switch r.Method {
+	case http.MethodPost:
+		if walletID != "" {
+			s.sendError(w, "invalid path", http.StatusNotFound)
+			return
+		}
+		s.handleCreateWallet(w, r)
+	case http.MethodGet:
+		if walletID == "" {
+			s.sendError(w, "wallet_id is required in path", http.StatusBadRequest)
+			return
+		}
+		s.handleGetWallet(w, r, walletID)
+	default:
+		s.sendError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *Server) Run() error {
 	err := s.httpServer.ListenAndServe()
-
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
-
 	return err
 }
 
@@ -49,6 +68,22 @@ type WalletRequest struct {
 	UserID   string `json:"user_id"`
 	Name     string `json:"name"`
 	Currency string `json:"currency"`
+}
+
+func (r *WalletRequest) Validate() error {
+	if r.UserID == "" {
+		return errors.New("user_id is required")
+	}
+	if _, err := uuid.Parse(r.UserID); err != nil {
+		return errors.New("user_id is invalid")
+	}
+	if r.Name == "" {
+		return errors.New("name is required")
+	}
+	if r.Currency == "" {
+		return errors.New("currency is required")
+	}
+	return nil
 }
 
 type WalletResponse struct {
@@ -60,40 +95,21 @@ type WalletResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func (s *Server) handleCreateWallet(w http.ResponseWriter, r *http.Request) {
 	var req WalletRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		s.sendError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
-	if req.UserID == "" {
-		http.Error(w, "user_id is required", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
-		return
-	}
-	if req.Currency == "" {
-		http.Error(w, "currency is required", http.StatusBadRequest)
+	if err := req.Validate(); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	now := time.Now()
-
 	walletID := uuid.New()
-
-	userUUID, err := uuid.Parse(req.UserID)
-	if err != nil {
-		http.Error(w, "user_id is invalid", http.StatusBadRequest)
-		return
-	}
+	userUUID, _ := uuid.Parse(req.UserID)
 
 	wallet := &models.Wallet{
 		ID:        walletID,
@@ -119,25 +135,10 @@ func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: wallet.CreatedAt,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		logrus.WithError(err).Error("failed to encode response")
-	}
+	s.sendJSON(w, resp, http.StatusCreated)
 }
 
-func (s *Server) getWallet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		s.sendError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	walletID := r.URL.Query().Get("id")
-	if walletID == "" {
-		s.sendError(w, "wallet_id is required", http.StatusBadRequest)
-		return
-	}
-
+func (s *Server) handleGetWallet(w http.ResponseWriter, r *http.Request, walletID string) {
 	s.walletsMu.Lock()
 	wallet, exists := s.wallet[walletID]
 	s.walletsMu.Unlock()
