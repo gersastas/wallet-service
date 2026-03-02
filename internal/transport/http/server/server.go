@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gersastas/wallet-service/internal/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,6 +16,8 @@ type Server struct {
 	httpServer *http.Server
 	stats      map[string]int
 	mu         sync.Mutex
+	wallets    map[string]*models.Wallet
+	walletsMu  sync.Mutex
 }
 
 func New(address string) *Server {
@@ -25,6 +28,8 @@ func New(address string) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/time", s.timeHandler)
 	mux.HandleFunc("/stats", s.statsHandler)
+	mux.HandleFunc("/wallets/create", s.createWallet)
+	mux.HandleFunc("/wallets/get", s.getWallet)
 
 	s.httpServer = &http.Server{
 		Addr:    address,
@@ -78,4 +83,12 @@ func getIP(r *http.Request) string {
 		host = r.RemoteAddr
 	}
 	return host
+}
+
+func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (s *Server) getWallet(w http.ResponseWriter, r *http.Request) {
+
 }
