@@ -14,16 +14,12 @@ import (
 
 type Server struct {
 	httpServer *http.Server
-	stats      map[string]int
-	mu         sync.Mutex
 	wallet     map[string]*models.Wallet
 	walletsMu  sync.Mutex
 }
 
 func New(address string) *Server {
-	s := &Server{
-		stats: make(map[string]int),
-	}
+	s := &Server{}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wallets/create", s.createWallet)
