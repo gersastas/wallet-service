@@ -23,7 +23,7 @@ func New(address string, db *sql.DB) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
-		database: &database.WalletRepository{},
+		database: database.NewWalletRepository(db),
 	}
 
 	r.Post("/wallets", s.handleCreateWallet)
