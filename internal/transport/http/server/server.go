@@ -1,12 +1,13 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sync"
 	"time"
 
+	"github.com/gersastas/wallet-service/internal/database"
 	"github.com/gersastas/wallet-service/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -15,15 +16,14 @@ import (
 
 type Server struct {
 	httpServer *http.Server
-	wallet     map[string]*models.Wallet
-	walletsMu  sync.Mutex
+	database   *database.WalletRepository
 }
 
-func New(address string) *Server {
+func New(address string, db *sql.DB) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
-		wallet: make(map[string]*models.Wallet),
+		database: database.NewWalletRepository(db),
 	}
 
 	r.Post("/wallets", s.handleCreateWallet)
@@ -107,9 +107,11 @@ func (s *Server) handleCreateWallet(w http.ResponseWriter, r *http.Request) {
 		DeletedAt: nil,
 	}
 
-	s.walletsMu.Lock()
-	s.wallet[walletID.String()] = wallet
-	s.walletsMu.Unlock()
+	if err := s.database.Create(wallet); err != nil {
+		logrus.WithError(err).Error("failed to create wallet")
+		s.sendError(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	resp := WalletResponse{
 		ID:        wallet.ID.String(),
@@ -124,22 +126,26 @@ func (s *Server) handleCreateWallet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetWallet(w http.ResponseWriter, r *http.Request) {
-	walletID := chi.URLParam(r, "id")
-	if walletID == "" {
+	walletIDStr := chi.URLParam(r, "id")
+	if walletIDStr == "" {
 		s.sendError(w, "wallet_id is required", http.StatusBadRequest)
 		return
 	}
 
-	s.walletsMu.Lock()
-	wallet, exists := s.wallet[walletID]
-	s.walletsMu.Unlock()
-
-	if !exists {
-		s.sendError(w, "wallet not found", http.StatusNotFound)
+	walletID, err := uuid.Parse(walletIDStr)
+	if err != nil {
+		s.sendError(w, "invalid wallet_id", http.StatusBadRequest)
 		return
 	}
 
-	if wallet.DeletedAt != nil {
+	wallet, err := s.database.GetByID(walletID)
+	if err != nil {
+		logrus.WithError(err).Error("failed to get wallet")
+		s.sendError(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if wallet == nil {
 		s.sendError(w, "wallet not found", http.StatusNotFound)
 		return
 	}
